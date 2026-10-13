@@ -1,4 +1,4 @@
-project('dxvk', ['c', 'cpp'], version : 'v1.11.0', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype' ])
+project('dxvk', ['c', 'cpp'], version : 'v1.14.1', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype' ])
 
 cpu_family = target_machine.cpu_family()
 platform   = target_machine.system()
@@ -6,7 +6,7 @@ fs = import('fs')
 
 cpp = meson.get_compiler('cpp')
 cc = meson.get_compiler('c')
-dxvk_is_msvc = cpp.get_id() == 'msvc'
+dxvk_is_msvc = cpp.get_argument_syntax() == 'msvc'
 
 compiler_args = [
   '-msse',
@@ -112,7 +112,6 @@ if platform == 'windows'
     )
   endif
 
-  dxvk_wsi = 'win32'
   compiler_args += ['-DDXVK_WSI_WIN32']
 endif
 

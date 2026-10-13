@@ -39,9 +39,14 @@ namespace dxvk {
 
     BOOL ShowCursor(BOOL bShow);
 
-    HRESULT SetHardwareCursor(UINT XHotSpot, UINT YHotSpot, const CursorBitmap& bitmap);
+    ~D3D9Cursor() {
+      if (m_hCursor != nullptr)
+        ::DestroyCursor(m_hCursor);
+    }
 
-    HRESULT SetSoftwareCursor(UINT XHotSpot, UINT YHotSpot, Com<IDirect3DTexture9> pCursorBitmap);
+    void SetHardwareCursor(UINT XHotSpot, UINT YHotSpot, const CursorBitmap& bitmap);
+
+    void SetSoftwareCursor(UINT XHotSpot, UINT YHotSpot, Com<IDirect3DTexture9>&& pCursorBitmap);
 
     D3D9_SOFTWARE_CURSOR* GetSoftwareCursor() {
       return &m_sCursor;
@@ -53,11 +58,11 @@ namespace dxvk {
 
   private:
 
-    BOOL                  m_visible       = FALSE;
+    BOOL                  m_visible = FALSE;
 
     D3D9_SOFTWARE_CURSOR  m_sCursor;
 
-    HCURSOR               m_hCursor       = nullptr;
+    HCURSOR               m_hCursor = nullptr;
 
   };
 

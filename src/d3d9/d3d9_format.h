@@ -89,6 +89,7 @@ namespace dxvk {
     GET4 = MAKEFOURCC('G', 'E', 'T', '4'),
     GET1 = MAKEFOURCC('G', 'E', 'T', '1'),
     NVDB = MAKEFOURCC('N', 'V', 'D', 'B'),
+    NVCS = MAKEFOURCC('N', 'V', 'C', 'S'),
     A2M1 = MAKEFOURCC('A', '2', 'M', '1'),
     A2M0 = MAKEFOURCC('A', '2', 'M', '0'),
     ATOC = MAKEFOURCC('A', 'T', 'O', 'C'),
@@ -155,7 +156,7 @@ namespace dxvk {
 
   /**
    * \brief Format mapping
-   * 
+   *
    * Maps a D3D9 format to a set of Vulkan formats.
    */
   struct D3D9_VK_FORMAT_MAPPING {
@@ -176,6 +177,8 @@ namespace dxvk {
   };
 
   D3D9_VK_FORMAT_MAPPING ConvertFormatUnfixed(D3D9Format Format);
+
+  class D3D9Adapter;
 
   /**
    * \brief Format table
@@ -211,6 +214,9 @@ namespace dxvk {
     const DxvkFormatInfo* GetUnsupportedFormatInfo(
       D3D9Format            Format) const;
 
+    void RefreshFormatSupport(
+      const D3D9Adapter*          pParent);
+
   private:
 
     bool CheckImageFormatSupport(
@@ -224,6 +230,7 @@ namespace dxvk {
 
     bool m_dfSupport;
     bool m_x4r4g4b4Support;
+    bool m_w11v11u10Support;
     bool m_d32supportFinal;
   };
 

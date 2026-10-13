@@ -106,6 +106,8 @@ namespace dxvk {
     uint32_t typeId = 0;
 
     uint32_t imageTypeId = 0;
+
+    uint32_t boundConst = 0;
   };
 
   enum DxsoSamplerType : uint32_t {
@@ -282,9 +284,7 @@ namespace dxvk {
     ////////////////////////////////////////////////
     // Temporary r# vector registers with immediate
     // indexing, and x# vector array registers.
-    std::array<
-      DxsoRegisterPointer,
-      DxsoMaxTempRegs> m_rRegs;
+    std::vector<DxsoRegisterPointer> m_rRegs;
 
     ////////////////////////////////////////////////
     // Predicate registers

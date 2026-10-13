@@ -1,4 +1,5 @@
 #include "d3d9_format.h"
+#include "d3d9_adapter.h"
 #include "d3d9_names.h"
 
 namespace dxvk {
@@ -457,11 +458,14 @@ namespace dxvk {
     const D3D9Options&     options) {
     m_dfSupport = options.supportDFFormats;
     m_x4r4g4b4Support = options.supportX4R4G4B4;
+    // W11V11U10 is only supported by D3D8
+    m_w11v11u10Support = false;
     m_d32supportFinal = options.supportD32;
 
     // AMD do not support 24-bit depth buffers on Vulkan,
     // so we have to fall back to a 32-bit depth format.
-    m_d24s8Support = CheckImageFormatSupport(adapter, VK_FORMAT_D24_UNORM_S8_UINT,
+    m_d24s8Support = !options.useD32forD24 &&
+                     CheckImageFormatSupport(adapter, VK_FORMAT_D24_UNORM_S8_UINT,
       VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
       VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 
@@ -496,6 +500,9 @@ namespace dxvk {
     if (Format == D3D9Format::X4R4G4B4 && !m_x4r4g4b4Support)
       return D3D9_VK_FORMAT_MAPPING();
 
+    if (Format == D3D9Format::W11V11U10 && !m_w11v11u10Support)
+      return D3D9_VK_FORMAT_MAPPING();
+
     if (Format == D3D9Format::DF16 && !m_dfSupport)
       return D3D9_VK_FORMAT_MAPPING();
 
@@ -504,9 +511,9 @@ namespace dxvk {
 
     if (Format == D3D9Format::D32 && !m_d32supportFinal)
       return D3D9_VK_FORMAT_MAPPING();
-    
+
     if (!m_d24s8Support && mapping.FormatColor == VK_FORMAT_D24_UNORM_S8_UINT)
-      mapping.FormatColor = VK_FORMAT_D32_SFLOAT_S8_UINT;
+      mapping.FormatColor = (mapping.Aspect & VK_IMAGE_ASPECT_STENCIL_BIT) ? VK_FORMAT_D32_SFLOAT_S8_UINT : VK_FORMAT_D32_SFLOAT;
 
     if (!m_d16s8Support && mapping.FormatColor == VK_FORMAT_D16_UNORM_S8_UINT)
       mapping.FormatColor = m_d24s8Support ? VK_FORMAT_D24_UNORM_S8_UINT : VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -577,16 +584,23 @@ namespace dxvk {
         return &unknown;
     }
   }
-  
+
 
   bool D3D9VkFormatTable::CheckImageFormatSupport(
     const Rc<DxvkAdapter>&      Adapter,
           VkFormat              Format,
           VkFormatFeatureFlags  Features) const {
     VkFormatProperties supported = Adapter->formatProperties(Format);
-    
+
     return (supported.linearTilingFeatures  & Features) == Features
         || (supported.optimalTilingFeatures & Features) == Features;
+  }
+
+
+  void D3D9VkFormatTable::RefreshFormatSupport(
+    const D3D9Adapter*          pParent) {
+    // W11V11U10 is only supported by D3D8
+    m_w11v11u10Support = pParent->IsD3DCompatibile(D3DCompatibility::D3D8);
   }
 
 }

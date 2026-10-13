@@ -5,6 +5,8 @@
 #include "dxvk_openxr.h"
 #include "dxvk_platform_exts.h"
 
+#include "../wsi/wsi_platform.h"
+
 #include <algorithm>
 
 namespace dxvk {
@@ -12,6 +14,8 @@ namespace dxvk {
   DxvkInstance::DxvkInstance() {
     Logger::info(str::format("Game: ", env::getExeName()));
     Logger::info(str::format("DXVK-Sarek: ", DXVK_VERSION));
+
+    wsi::init();
 
     m_config = Config::getUserConfig();
     m_config.merge(Config::getAppConfig(env::getExePath()));
@@ -50,7 +54,7 @@ namespace dxvk {
 
 
   DxvkInstance::~DxvkInstance() {
-
+    wsi::quit();
   }
 
 
@@ -130,7 +134,7 @@ namespace dxvk {
     appInfo.pApplicationName      = appName.c_str();
     appInfo.applicationVersion    = 0;
     appInfo.pEngineName           = "DXVK";
-    appInfo.engineVersion         = VK_MAKE_VERSION(1, 11, 0);
+    appInfo.engineVersion         = VK_MAKE_VERSION(1, 14, 1);
     appInfo.apiVersion            = VK_MAKE_VERSION(1, 1, 0);
 
     VkInstanceCreateInfo info;
@@ -172,12 +176,21 @@ namespace dxvk {
         filterFlags.set(DxvkDeviceFilterFlag::SkipCpuDevices);
     }
 
-    DxvkDeviceFilter filter(filterFlags);
+    DxvkDeviceFilter filter(filterFlags, m_options);
     std::vector<Rc<DxvkAdapter>> result;
 
+    uint32_t numDGPU = 0;
+    uint32_t numIGPU = 0;
+
     for (uint32_t i = 0; i < numAdapters; i++) {
-      if (filter.testAdapter(deviceProperties[i]))
+      if (filter.testAdapter(deviceProperties[i])) {
+        if (deviceProperties[i].deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+          numDGPU += 1;
+        else if (deviceProperties[i].deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+          numIGPU += 1;
+
         result.push_back(new DxvkAdapter(m_vki, adapters[i]));
+      }
     }
 
     std::stable_sort(result.begin(), result.end(),
@@ -198,6 +211,11 @@ namespace dxvk {
 
         return aRank < bRank;
       });
+
+    if (m_options.hideIntegratedGraphics && numDGPU > 0 && numIGPU > 0) {
+      result.resize(numDGPU);
+      numIGPU = 0;
+    }
 
     if (result.size() == 0) {
       Logger::warn("DXVK: No adapters found. Please check your "

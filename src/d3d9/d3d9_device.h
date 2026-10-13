@@ -107,7 +107,7 @@ namespace dxvk {
 
     friend class D3D9SwapChainEx;
     friend class D3D9UserDefinedAnnotation;
-    friend class DxvkD3D8Bridge;
+    friend class DxvkLegacyD3DDeviceBridge;
   public:
 
     D3D9DeviceEx(
@@ -499,7 +499,7 @@ namespace dxvk {
     HRESULT STDMETHODCALLTYPE GetIndices(IDirect3DIndexBuffer9** ppIndexData);
 
     HRESULT STDMETHODCALLTYPE CreatePixelShader(
-      const DWORD*                  pFunction, 
+      const DWORD*                  pFunction,
             IDirect3DPixelShader9** ppShader);
 
     HRESULT STDMETHODCALLTYPE SetPixelShader(IDirect3DPixelShader9* pShader);
@@ -656,8 +656,6 @@ namespace dxvk {
 
     bool SupportsSWVP();
 
-    bool IsExtended();
-
     HWND GetWindow();
 
     Rc<DxvkDevice> GetDXVKDevice() {
@@ -677,7 +675,7 @@ namespace dxvk {
 
     /**
      * \brief Locks a subresource of an image
-     * 
+     *
      * \param [in] Subresource The subresource of the image to lock
      * \param [out] pLockedBox The returned locked box of the image, containing data ptr and strides
      * \param [in] pBox The region of the subresource to lock. This offsets the returned data ptr
@@ -700,7 +698,7 @@ namespace dxvk {
 
     /**
      * \brief Unlocks a subresource of an image
-     * 
+     *
      * Passthrough to device unlock.
      * \param [in] Subresource The subresource of the image to unlock
      * \returns \c D3D_OK if the parameters are valid or D3DERR_INVALIDCALL if it fails.
@@ -791,7 +789,7 @@ namespace dxvk {
     inline bool IsAlphaToCoverageEnabled() {
       const bool alphaTest = m_state.renderStates[D3DRS_ALPHATESTENABLE] != 0;
 
-      return m_amdATOC || (m_nvATOC && alphaTest);
+      return (m_amdATOC || (m_nvATOC && alphaTest)) && m_flags.test(D3D9DeviceFlag::ValidSampleMask);
     }
 
     inline bool IsDepthBiasEnabled() {
@@ -816,7 +814,7 @@ namespace dxvk {
     }
 
     void BindMultiSampleState();
-    
+
     void BindBlendState();
 
     void BindBlendFactor();
@@ -837,12 +835,12 @@ namespace dxvk {
 
     template <DxsoProgramType ShaderStage, typename HardwareLayoutType, typename SoftwareLayoutType, typename ShaderType>
     inline void UploadConstantSet(const SoftwareLayoutType& Src, const D3D9ConstantLayout& Layout, const ShaderType& Shader);
-    
+
     template <DxsoProgramType ShaderStage>
     void UploadConstants();
-    
+
     void UpdateClipPlanes();
-    
+
     template <uint32_t Offset, uint32_t Length>
     void UpdatePushConstant(const void* pData);
 
@@ -865,7 +863,7 @@ namespace dxvk {
       D3DPRIMITIVETYPE PrimitiveType,
       UINT             PrimitiveCount,
       UINT             InstanceCount);
-    
+
     uint32_t GetInstanceCount() const;
 
     void PrepareDraw(D3DPRIMITIVETYPE PrimitiveType);
@@ -906,7 +904,7 @@ namespace dxvk {
     void FlushImplicit(BOOL StrongHint);
 
     bool ChangeReportedMemory(int64_t delta) {
-      if (IsExtended())
+      if (m_d3dCompatibility.test(D3DCompatibility::D3D9Ex))
         return true;
 
       int64_t availableMemory = m_availableMemory.fetch_add(delta);
@@ -928,6 +926,34 @@ namespace dxvk {
     const D3D9ConstantLayout& GetPixelConstantLayout()  { return m_psLayout; }
 
     HRESULT ResetState(D3DPRESENT_PARAMETERS* pPresentationParameters);
+
+    HRESULT SetColorKeyState(DWORD stage, bool colorKeyState) {
+      if (unlikely(m_useColorKey[stage] != colorKeyState)) {
+        m_useColorKey[stage] = colorKeyState;
+        m_flags.set(D3D9DeviceFlag::DirtyFFPixelShader);
+      }
+      return D3D_OK;
+    }
+
+    HRESULT SetColorKey(DWORD stage, DWORD colorKeyLow, DWORD colorKeyHigh) {
+      if (unlikely(m_colorKeyLow[stage] != colorKeyLow || m_colorKeyHigh[stage] != colorKeyHigh)) {
+        m_colorKeyLow[stage] = colorKeyLow;
+        m_colorKeyHigh[stage] = colorKeyHigh;
+        m_flags.set(D3D9DeviceFlag::DirtyFFPixelShader);
+      }
+      return D3D_OK;
+    }
+
+    HRESULT SetLegacyLightsState(bool legacyLightState) {
+      m_useLegacyLights = legacyLightState;
+      return D3D_OK;
+    }
+
+    HRESULT SetAlternatePixelCenter(bool alternatePixelCenter) {
+      m_alternatePixelCenter = alternatePixelCenter;
+      return D3D_OK;
+    }
+
     HRESULT ResetSwapChain(D3DPRESENT_PARAMETERS* pPresentationParameters, D3DDISPLAYMODEEX* pFullscreenDisplayMode);
 
     HRESULT InitialReset(D3DPRESENT_PARAMETERS* pPresentationParameters, D3DDISPLAYMODEEX* pFullscreenDisplayMode);
@@ -936,8 +962,8 @@ namespace dxvk {
       return m_samplerCount.load();
     }
 
-    bool IsD3D8Compatible() const {
-      return m_isD3D8Compatible;
+    bool IsD3DCompatibile(D3DCompatibility d3dCompatibility) const {
+      return m_d3dCompatibility.test(d3dCompatibility);
     }
 
   private:
@@ -1162,6 +1188,23 @@ namespace dxvk {
 
     uint64_t GetCurrentSequenceNumber();
 
+    bool IsTextureBoundAsAttachment(const D3D9CommonTexture* pTexture) const {
+      if (unlikely(pTexture->IsRenderTarget())) {
+        for (uint32_t i : bit::BitMask(m_boundRTs)) {
+          auto texInfo = m_state.renderTargets[i]->GetCommonTexture();
+          if (unlikely(texInfo == pTexture)) {
+            return true;
+          }
+        }
+      } else if (unlikely(pTexture->IsDepthStencil() && m_state.depthStencil != nullptr)) {
+        auto texInfo = m_state.depthStencil->GetCommonTexture();
+        if (unlikely(texInfo == pTexture)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     Com<D3D9InterfaceEx>            m_parent;
     D3DDEVTYPE                      m_deviceType;
     HWND                            m_window;
@@ -1257,7 +1300,20 @@ namespace dxvk {
     D3D9ShaderMasks                 m_psShaderMasks = FixedFunctionMask;
 
     bool                            m_isSWVP;
-    bool                            m_isD3D8Compatible;
+
+    // D3D7 and earlier texture color keying
+    std::array<bool,
+      caps::MaxSimultaneousTextures> m_useColorKey = { };
+    std::array<DWORD,
+      caps::MaxSimultaneousTextures> m_colorKeyLow = { };
+    std::array<DWORD,
+      caps::MaxSimultaneousTextures> m_colorKeyHigh = { };
+
+    // D3D6 and earlier legacy light model state
+    bool                            m_useLegacyLights = false;
+    // Fixed function VS alternate pixel center hack
+    bool                            m_alternatePixelCenter = false;
+
     bool                            m_amdATOC         = false;
     bool                            m_nvATOC          = false;
     bool                            m_ffZTest         = false;
@@ -1279,7 +1335,7 @@ namespace dxvk {
     D3D9ConstantLayout              m_vsLayout;
     D3D9ConstantLayout              m_psLayout;
     D3D9ConstantSets                m_consts[DxsoProgramTypes::Count];
-	
+
     D3D9UserDefinedAnnotation*      m_annotation = nullptr;
 
     D3D9ViewportInfo                m_viewportInfo;
@@ -1299,7 +1355,8 @@ namespace dxvk {
     // references objects that can call back into the device when freed.
     Direct3DState9                  m_state;
 
-    DxvkD3D8Bridge                  m_d3d8Bridge;
+    DxvkLegacyD3DDeviceBridge       m_legacyD3DBridge;
+    D3DCompatibilityFlags           m_d3dCompatibility;
   };
 
 }

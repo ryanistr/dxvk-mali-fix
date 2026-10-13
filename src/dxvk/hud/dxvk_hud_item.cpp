@@ -99,7 +99,7 @@ namespace dxvk::hud {
 
 
   HudClientApiItem::HudClientApiItem(std::string api)
-  : m_api(api) {
+  : m_api(std::move(api)) {
 
   }
 
@@ -128,6 +128,11 @@ namespace dxvk::hud {
     VkPhysicalDeviceProperties props = device->adapter()->deviceProperties();
 
     m_deviceName = props.deviceName;
+
+    // Screenshots reach bug reports far more often than logs do, so the
+    // device line carries the same warning the log emits at startup.
+    if (DxvkAdapter::hasDegradedFeatures(device->features()))
+      m_deviceName += " [DEGRADED]";
     m_driverVer = str::format("Driver: ",
       VK_VERSION_MAJOR(props.driverVersion), ".",
       VK_VERSION_MINOR(props.driverVersion), ".",
@@ -525,7 +530,9 @@ namespace dxvk::hud {
 
       uint64_t memUsedMib = m_heaps[i].memoryUsed >> 20;
       uint64_t memAllocatedMib = m_heaps[i].memoryAllocated >> 20;
-      uint64_t percentage = (100 * m_heaps[i].memoryAllocated) / m_memory.memoryHeaps[i].size;
+      uint64_t percentage = m_heaps[i].memoryBudget
+        ? (100 * m_heaps[i].memoryAllocated) / m_heaps[i].memoryBudget
+        : 0u;
 
       std::string label = str::format(isDeviceLocal ? "Vidmem" : "Sysmem", " heap ", i, ": ");
       std::string text  = str::format(std::setfill(' '), std::setw(5), memAllocatedMib, " MB (", percentage, "%) ",
