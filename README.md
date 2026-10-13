@@ -1,5 +1,16 @@
 # DXVK-Sarek:
 
+> **This fork — `ryanistr/dxvk-mali-fix` — is unmodified upstream code plus a vendored dossier.**
+> It exists to document what the DXVK build that **GameHub / Xj (盖世游戏)** ships as
+> `dxvk-v1.11.1-mali-fix` actually is. Start at
+> **[`GAMEHUB-MALI-FIX-DOSSIER.md`](GAMEHUB-MALI-FIX-DOSSIER.md)**, which establishes by byte
+> identity that GameHub redistributes this repo's `v1.11.1-mali-fix` tag verbatim, and pins the
+> Mali patch to commit `617958f` (three DXBC-compiler texture sites gated on
+> `vendorID == 0x13B5`, ARM Mali).
+>
+> The dossier lives on the `gamehub-verification` branch (the current default). The upstream tag
+> `v1.11.1-mali-fix` and all upstream branches are untouched on this fork.
+
 ### Why Does This Repo Exist?
 
 This repository was created to support users with Vulkan capable GPUs that do not meet the 1.3 requirement of the current builds. My goal is to ensure that everyone can benefit from the nice performance of DXVK, even if their hardware is slightly older.
