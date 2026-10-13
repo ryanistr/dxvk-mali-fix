@@ -1510,8 +1510,10 @@ namespace dxvk {
     // All other unknown formats should result in an error return.
     VkFormat format = LookupFormat(Format, DXGI_VK_FORMAT_MODE_ANY).Format;
 
-    if (format == VK_FORMAT_UNDEFINED)
-      return E_INVALIDARG;
+    if (format == VK_FORMAT_UNDEFINED) {
+      *pNumQualityLevels = 0;
+      return S_OK;
+    }
 
     // Zero-init now, leave value undefined otherwise.
     // This does actually match native D3D11 behaviour.
